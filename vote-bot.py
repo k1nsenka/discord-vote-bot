@@ -23,6 +23,80 @@ async def on_ready():
 async def create_weekly_poll(ctx, 年: int, 月: int, 日: int):
     # コマンド実行開始を通知
     await ctx.send("投票を作成しています。しばらくお待ちください...")
+
+@bot.command(name='期間投票作成')
+async def create_period_poll(ctx, 開始年: int, 開始月: int, 開始日: int, 終了年: int, 終了月: int, 終了日: int):
+    """
+    指定した期間の9:00-21:00の2時間枠（重複あり）の投票を作成します
+    使用例: !期間投票作成 2025 4 7 2025 4 15
+    """
+    # コマンド実行開始を通知
+    await ctx.send("投票を作成しています。しばらくお待ちください...")
+    
+    # 開始日と終了日の設定
+    try:
+        start_date = datetime.datetime(開始年, 開始月, 開始日, tzinfo=JST)
+        end_date = datetime.datetime(終了年, 終了月, 終了日, tzinfo=JST)
+    except ValueError as e:
+        await ctx.send(f"日付の指定が正しくありません: {str(e)}")
+        return
+    
+    # 日数を計算
+    delta = end_date - start_date
+    days = delta.days + 1  # 終了日も含める
+    
+    if days <= 0:
+        await ctx.send("終了日は開始日以降に設定してください。")
+        return
+    
+    if days > 31:
+        await ctx.send("期間が長すぎます。最大31日間までにしてください。")
+        return
+    
+    # 投票メッセージを送信
+    try:
+        intro_msg = await ctx.send(f"**{開始年}年{開始月}月{開始日}日から{終了年}年{終了月}月{終了日}日までの予定投票**\n各日の参加可能な時間帯に投票してください（複数選択可）")
+        await asyncio.sleep(1)  # 少し待機
+    except Exception as e:
+        await ctx.send(f"メッセージ送信中にエラーが発生しました: {str(e)}")
+        return  # エラーがあれば中断
+    
+    # 曜日の日本語表記
+    weekdays = ['月', '火', '水', '木', '金', '土', '日']
+    
+    # 指定された期間の投票を作成
+    for day_offset in range(days):
+        current_date = start_date + datetime.timedelta(days=day_offset)
+        weekday = weekdays[current_date.weekday()]
+        
+        # 各日の投票メッセージ
+        poll_message = f"**{current_date.month}月{current_date.day}日({weekday})の参加可能時間帯**"
+        
+        # 9:00から21:00まで、2時間枠（重複あり）の選択肢を作成
+        options = []
+        for hour in range(9, 20):
+            # 利用可能な絵文字数を超えないようにする
+            if len(options) < len(EMOJI_NUMBERS):
+                options.append(f"{hour:02d}:00-{hour+2:02d}:00")
+        
+        # 投票メッセージに選択肢を追加
+        for i, option in enumerate(options):
+            poll_message += f"\n{EMOJI_NUMBERS[i]} {option}"
+        
+        # 投票メッセージを送信
+        try:
+            poll = await ctx.send(poll_message)
+            
+            # リアクションを1つずつ追加（レート制限対策）
+            for i in range(len(options)):
+                await poll.add_reaction(EMOJI_NUMBERS[i])
+                await asyncio.sleep(1)  # 各リアクション間に1秒待機
+        except Exception as e:
+            await ctx.send(f"エラーが発生しました: {str(e)}")
+            return
+        
+        # 各投票の間に少し待機（レート制限対策）
+        await asyncio.sleep(3)
     """
     指定した日から一週間の9:00-21:00の2時間枠（重複あり）の投票を作成します
     使用例: !週間投票作成 2025 4 7
@@ -109,6 +183,10 @@ async def help_command(ctx):
 **`!週間投票作成 [年] [月] [日]`**
 指定した日から一週間の9:00-21:00の2時間枠（重複あり）の投票を作成します
 例: `!週間投票作成 2025 4 7`
+
+**`!期間投票作成 [開始年] [開始月] [開始日] [終了年] [終了月] [終了日]`**
+指定した期間の9:00-21:00の2時間枠（重複あり）の投票を作成します（最大31日間）
+例: `!期間投票作成 2025 4 7 2025 4 15`
 
 **`!投票作成 [タイトル] [選択肢1] [選択肢2] ...`**
 カスタム投票を作成します（最大10個の選択肢）
